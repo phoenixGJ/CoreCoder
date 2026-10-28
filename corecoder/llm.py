@@ -209,6 +209,7 @@ class LLM:
     def _drain(self, stream, on_token, on_reasoning) -> LLMResponse:
         """Consume one stream into an LLMResponse."""
         content_parts: list[str] = []
+        # key:int ,value:dict
         tc_map: dict[int, dict] = {}  # index -> {id, name, arguments_str}
         prompt_tok = 0
         completion_tok = 0
@@ -220,6 +221,7 @@ class LLM:
             if usage:
                 # some providers send usage with null fields; coerce to 0 so the
                 # running totals below don't blow up on int + None
+                # 写0
                 prompt_tok = getattr(usage, "prompt_tokens", 0) or 0
                 completion_tok = getattr(usage, "completion_tokens", 0) or 0
 

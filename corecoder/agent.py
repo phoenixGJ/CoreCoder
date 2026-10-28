@@ -44,6 +44,7 @@ class Agent:
         self.plan_mode = False  # toggled by /plan; while on, mutating tools are refused
 
         # wire up sub-agent capability
+        # 连接子agent 能力
         for t in self.tools:
             if isinstance(t, AgentTool):
                 t._parent_agent = self
@@ -69,12 +70,15 @@ class Agent:
 
     def chat(self, user_input: str, on_token=None, on_tool=None, on_reasoning=None) -> str:
         """Process one user message. May involve multiple LLM/tool rounds."""
+        # 将用户问题追加到对话历史中
         self.messages.append({"role": "user", "content": user_input})
+        # 检查上下文是否需要压缩，达到阈值时才执行压缩
         self.context.maybe_compress(self.messages, self.llm)
-
+        # 设置最大运行轮数，防止模型陷入死循环（最便宜的保险，烧钱心疼）
         for _ in range(self.max_rounds):
             resp = self.llm.chat(
                 messages=self._full_messages(),
+                # 工具的规格说明，告诉模型：工具叫什么，能做什么，调用时需要传什么参数以及参数是什么类型以及哪些参数是必填的
                 tools=self._tool_schemas(),
                 on_token=on_token,
                 on_reasoning=on_reasoning,
@@ -153,10 +157,12 @@ class Agent:
     def _exec_tool(self, tc) -> str:
         """Execute a single tool call, returning the result string."""
         tool = self._tool_by_name.get(tc.name)
+        # 检查工具是否存在
         if tool is None:
             return f"Error: unknown tool '{tc.name}'"
         # validate arguments first so a TypeError raised *inside* the tool isn't
         # mislabelled as a bad-arguments error from the caller
+        # 当 Agent 调用工具失败时，怎么判断是大模型传错了参数，还是工具执行过程中出了问题？
         try:
             inspect.signature(tool.execute).bind(**tc.arguments)
         except TypeError as e:
@@ -175,7 +181,7 @@ class Agent:
         when the model returns N tool calls at once, run them in parallel.
         """
         from .tools.bash import get_tracked_cwd, set_tracked_cwd
-
+        # ① 通知即将执行哪些工具
         for tc in tool_calls:
             if on_tool:
                 on_tool(tc.name, tc.arguments)
@@ -187,6 +193,7 @@ class Agent:
         # start from the launch directory: hand the session cwd in, and merge
         # any cd back in call order so the batch behaves like a sequence
         session_cwd = get_tracked_cwd()
+        # ② 创建线程池
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             def run(i, tc, base_cwd):
                 is_bash = tc.name == "bash"
@@ -199,7 +206,7 @@ class Agent:
                 # only a worker that actually moved the dir reports back; a
                 # sibling that merely inherited the base must not revert a cd
                 return i, out, cwd_after if cwd_after != base_cwd else None
-
+            # ③ 把工具任务交给线程池
             futures = {
                 i: pool.submit(run, i, tc, session_cwd)
                 for i, tc in enumerate(tool_calls)
@@ -221,8 +228,17 @@ class Agent:
         tool_calls without a matching tool reply for each id, so this keeps the
         history valid when execution is interrupted partway through.
         """
+
+        """
+        AI对我注释的总结：
+        先从消息历史里找出“已经有工具回复”的 tool_call_id，然后遍历这次模型返回的所有工具调用；
+        如果某个工具调用还没有对应回复，就补上一条 "[interrupted]" 的 tool 消息，表示它被中断了。
+        """
+        # 拿到消息历史中已经得到工具回复的ID
         answered = {m.get("tool_call_id") for m in self.messages if m.get("role") == "tool"}
+        # 遍历工具列表
         for tc in tool_calls:
+            # 如果工具ID不在拿到回复的ID中，就会加上被中断这个标志添加到对话历史中
             if tc.id not in answered:
                 self.messages.append({
                     "role": "tool",

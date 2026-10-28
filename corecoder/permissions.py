@@ -24,7 +24,15 @@ class Permission:
     """Session-scoped consent state. No prompts itself: the CLI hands in
     `ask`, and the only I/O is the optional always-allow store."""
 
-    READ_ONLY = frozenset({"read_file", "glob", "grep", "todo_write"})
+    READ_ONLY = frozenset(
+        {
+            "read_file",
+            "glob",
+            "grep",
+            "todo_write",
+            "load_skill",
+        }
+    )
 
     def __init__(self, ask=None, allow_all: bool = False, persist_path: Path | None = None):
         # ask(tool_name, arguments) -> "once" | "always" | "deny"

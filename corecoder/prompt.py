@@ -17,6 +17,14 @@ def system_prompt(tools) -> str:
     tool_list = "\n".join(f"- **{t.name}**: {t.description}" for t in tools)
     uname = platform.uname()
 
+    # 新增：找到技能加载工具
+    skill_tool = next((t for t in tools if t.name == "load_skill"), None)
+
+    # 新增：获取技能目录
+    skill_catalog = (
+        skill_tool.catalog() if skill_tool is not None else "(no skills available)"
+    )
+
     return f"""\
 You are CoreCoder, an AI coding assistant running in the user's terminal.
 You help with software engineering: writing code, fixing bugs, refactoring, explaining code, running commands, and more.
@@ -28,6 +36,13 @@ You help with software engineering: writing code, fixing bugs, refactoring, expl
 
 # Tools
 {tool_list}
+
+# Skills
+{skill_catalog}
+
+When a skill is relevant to the user's task,
+call load_skill to read its full instructions.
+
 
 # Rules
 1. **Read before edit.** Always read a file before modifying it.
