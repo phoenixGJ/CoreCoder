@@ -15,3 +15,5 @@ venv/
 .DS_Store
 .pytest_cache/
 .tmp/
+# 忽略 CoreCoder 会话记录
+.corecoder/

@@ -10,7 +10,7 @@ import time
 import uuid
 from pathlib import Path
 
-SESSIONS_DIR = Path.home() / ".corecoder" / "sessions"
+SESSIONS_DIR = Path(r"E:\github_project\CoreCoder") / ".corecoder" / "sessions"
 _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _MAX_SESSION_ID_LEN = 100  # keep filenames comfortably under the OS limit
 
@@ -38,7 +38,9 @@ def _session_path(session_id: str) -> Path:
     return path
 
 
-def save_session(messages: list[dict], model: str, session_id: str | None = None) -> str:
+def save_session(
+    messages: list[dict], model: str, session_id: str | None = None
+) -> str:
     """Save conversation to disk. Returns the session ID."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -85,12 +87,14 @@ def list_sessions() -> list[dict]:
                 if m.get("role") == "user" and m.get("content"):
                     preview = m["content"][:80]
                     break
-            sessions.append({
-                "id": data.get("id", f.stem),
-                "model": data.get("model", "?"),
-                "saved_at": data.get("saved_at", "?"),
-                "preview": preview,
-            })
+            sessions.append(
+                {
+                    "id": data.get("id", f.stem),
+                    "model": data.get("model", "?"),
+                    "saved_at": data.get("saved_at", "?"),
+                    "preview": preview,
+                }
+            )
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
             continue
 
