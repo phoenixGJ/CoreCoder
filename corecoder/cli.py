@@ -18,7 +18,7 @@ from .hooks import load_hooks
 from .llm import LLM, LiteLLM
 from .mcp import load_mcp_tools
 from .permissions import DEFAULT_STORE, Permission
-from .session import list_sessions, load_session, save_session
+from .session import list_sessions, load_session, JsonlSessionWriter
 from .tools import ALL_TOOLS
 
 console = Console()
@@ -117,7 +117,7 @@ def main():
         return
 
     # interactive REPL
-    _repl(agent, config)
+    _repl(agent, config, args.resume)
 
 
 def _ask_permission(tool_name: str, arguments: dict) -> str:
@@ -163,7 +163,11 @@ def _run_once(agent: Agent, prompt: str):
     print()
 
 
-def _repl(agent: Agent, config: Config):
+def _repl(
+    agent: Agent,
+    config: Config,
+    session_id: str | None = None,
+):
     """Interactive read-eval-print loop."""
     perm = agent.permission
     mode = "auto-approve every tool call (--yes)" if (perm and perm.allow_all) else "ask before mutating tools"
@@ -182,6 +186,31 @@ def _repl(agent: Agent, config: Config):
 
     hist_path = os.path.expanduser("~/.corecoder_history")
     history = FileHistory(hist_path)
+
+    # 初始化 JSONL 会话保存器
+    writer = JsonlSessionWriter(
+        session_id=session_id,
+        messages=agent.messages,
+        model=config.model,
+        revision=agent.context.revision,
+    )
+
+    def persist(show=True, force=False):
+        try:
+            changed = writer.save(
+                agent.messages,
+                config.model,
+                agent.context.revision,
+                force=force,
+            )
+        except (OSError, ValueError, TypeError) as e:
+            console.print(f"[yellow]Session save failed: {e}[/yellow]")
+            return False
+
+        if changed and show:
+            console.print(f"[dim]Auto-saved: {writer.session_id}[/dim]")
+
+        return True
 
     # Enter submits, Escape+Enter inserts a newline (for pasting code blocks etc.)
     kb = KeyBindings()
@@ -216,10 +245,18 @@ def _repl(agent: Agent, config: Config):
         if user_input == "/help":
             _show_help()
             continue
+
         if user_input == "/reset":
             agent.reset()
+
+            # 新会话生成新的 JSONL 文件
+            writer = JsonlSessionWriter(
+                revision=agent.context.revision
+            )
+
             console.print("[yellow]Conversation reset.[/yellow]")
             continue
+
         if user_input == "/plan":
             agent.plan_mode = not agent.plan_mode
             if agent.plan_mode:
@@ -250,9 +287,11 @@ def _repl(agent: Agent, config: Config):
                 agent.llm.model = new_model
                 config.model = new_model
                 console.print(f"Switched to [cyan]{new_model}[/cyan]")
+                persist(show=False)
             else:
                 console.print(f"Current model: [cyan]{config.model}[/cyan]")
             continue
+        
         if user_input == "/compact":
             from .context import estimate_tokens
             before = estimate_tokens(agent.messages)
@@ -260,14 +299,24 @@ def _repl(agent: Agent, config: Config):
             after = estimate_tokens(agent.messages)
             if compressed:
                 console.print(f"[green]Compressed: {before} → {after} tokens ({len(agent.messages)} messages)[/green]")
+                persist(show=False)
             else:
                 console.print(f"[dim]Nothing to compress ({before} tokens, {len(agent.messages)} messages)[/dim]")
             continue
+
         if user_input == "/save":
-            sid = save_session(agent.messages, config.model)
-            console.print(f"[green]Session saved: {sid}[/green]")
-            console.print(f"Resume with: corecoder -r {sid}")
+            if persist(
+                show=False,
+                force=not writer.path.exists(),
+            ):
+                console.print(
+                    f"[green]Session saved: {writer.session_id}[/green]"
+                )
+                console.print(
+                    f"Resume with: corecoder -r {writer.session_id}"
+                )
             continue
+
         if user_input == "/diff":
             from .tools.edit import _changed_files
             if not _changed_files:
@@ -325,6 +374,10 @@ def _repl(agent: Agent, config: Config):
             else:
                 # response wasn't streamed (came after tool calls)
                 console.print(Markdown(response))
+
+            # Agent 正常完成回答后，追加最新消息
+            persist()
+
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted.[/yellow]")
         except Exception as e:  # noqa: BLE001

@@ -47,6 +47,8 @@ def estimate_tokens(messages: list[dict]) -> int:
 
 class ContextManager:
     def __init__(self, max_tokens: int = 128_000):
+        # revision 就是上下文版本号
+        self.revision = 0
         self.max_tokens = max_tokens
         # layer thresholds (fraction of max_tokens)
         self._snip_at = int(max_tokens * 0.50)    # 50% -> snip tool outputs
@@ -72,6 +74,9 @@ class ContextManager:
         if current > self._collapse_at and len(messages) > 4:
             self._hard_collapse(messages, llm)
             compressed = True
+
+        if compressed:
+            self.revision += 1
 
         return compressed
 

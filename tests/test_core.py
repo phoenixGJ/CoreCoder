@@ -72,7 +72,11 @@ def test_doc_python_line_references_are_current():
     }
 
     def resolve(ref: str) -> int | None:
-        for candidate in (ref, f"corecoder/{ref}", f"corecoder/tools/{ref.rsplit('/', 1)[-1]}"):
+        for candidate in (
+            ref,
+            f"corecoder/{ref}",
+            f"corecoder/tools/{ref.rsplit('/', 1)[-1]}",
+        ):
             if candidate in actual:
                 return actual[candidate]
         return None
@@ -88,7 +92,9 @@ def test_doc_python_line_references_are_current():
             if "about" in m.group(0) or "约" in m.group(0):
                 continue
             real = resolve(m.group(1))
-            assert real is not None, f"{doc.name}: unresolvable file reference {m.group(1)}"
+            assert (
+                real is not None
+            ), f"{doc.name}: unresolvable file reference {m.group(1)}"
             if real != int(m.group(2)):
                 line_no = text[: m.start()].count("\n") + 1
                 stale.append(
@@ -102,7 +108,7 @@ def test_public_api_exports():
     assert Agent is not None
     assert LLM is not None
     assert Config is not None
-    assert len(ALL_TOOLS) == 8
+    assert len(ALL_TOOLS) == 11
 
 
 def test_config_from_env(monkeypatch):
@@ -117,12 +123,13 @@ def test_config_defaults(monkeypatch):
     monkeypatch.delenv("CORECODER_MAX_TOKENS", raising=False)
 
     c = Config.from_env()
-    assert c.model == "gpt-5.5"
+    assert c.model == "deepseek-flash"
     assert c.max_tokens == 4096
     assert c.temperature == 0.0
 
 
 # --- Context ---
+
 
 def test_estimate_tokens():
     msgs = [{"role": "user", "content": "hello world"}]
@@ -192,16 +199,21 @@ def test_compress_never_leaves_an_orphan_tool_reply():
     msgs = []
     for i in range(20):
         msgs.append({"role": "user", "content": f"msg {i} " + "a" * 200})
-        msgs.append({"role": "assistant", "content": None, "tool_calls": [{"id": f"c{i}"}]})
+        msgs.append(
+            {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{i}"}]}
+        )
         msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": "b" * 800})
     ctx.maybe_compress(msgs, None)
     for i, m in enumerate(msgs):
         if m.get("role") == "tool":
             prev = msgs[i - 1]
-            assert prev.get("role") == "tool" or prev.get("tool_calls"), f"orphan tool at {i}"
+            assert prev.get("role") == "tool" or prev.get(
+                "tool_calls"
+            ), f"orphan tool at {i}"
 
 
 # --- Session ---
+
 
 def test_session_save_load(tmp_path, monkeypatch):
     monkeypatch.setattr(session_module, "SESSIONS_DIR", tmp_path)
@@ -234,8 +246,10 @@ def test_list_sessions():
 
 # --- Cost estimation ---
 
+
 def test_cost_estimation_known_model():
     from corecoder.llm import LLM
+
     llm = LLM.__new__(LLM)
     llm.model = "gpt-5.4"
     llm.total_prompt_tokens = 1_000_000
@@ -244,8 +258,10 @@ def test_cost_estimation_known_model():
     assert cost is not None
     assert cost == 2.5 + 7.5  # $2.5/M in + $15/M out * 0.5M
 
+
 def test_cost_estimation_kimi_k3():
     from corecoder.llm import LLM
+
     llm = LLM.__new__(LLM)
     llm.model = "kimi-k3"
     llm.total_prompt_tokens = 1_000_000
@@ -257,6 +273,7 @@ def test_cost_estimation_kimi_k3():
 
 def test_cost_estimation_unknown_model():
     from corecoder.llm import LLM
+
     llm = LLM.__new__(LLM)
     llm.model = "some-custom-model"
     llm.total_prompt_tokens = 1000
@@ -266,6 +283,7 @@ def test_cost_estimation_unknown_model():
 
 def _llm_at(model, prompt_tokens=1_000_000, completion_tokens=500_000):
     from corecoder.llm import LLM
+
     llm = LLM.__new__(LLM)
     llm.model = model
     llm.total_prompt_tokens = prompt_tokens
@@ -275,19 +293,27 @@ def _llm_at(model, prompt_tokens=1_000_000, completion_tokens=500_000):
 
 def test_pricing_json_overrides_and_extends_the_builtin_table(monkeypatch, tmp_path):
     from corecoder import llm as llm_module
+
     custom = tmp_path / "pricing.json"
     custom.write_text(
         json.dumps({"gpt-5.4": [100, 200], "my-own-model": [1, 2]}), encoding="utf-8"
     )
     monkeypatch.setattr(llm_module, "PRICING_FILE", custom)
 
-    assert _llm_at("gpt-5.4").estimated_cost == 100 + 100  # the override wins over (2.5, 15)
-    assert _llm_at("my-own-model").estimated_cost == 1 + 1  # a model the built-ins never heard of
+    assert (
+        _llm_at("gpt-5.4").estimated_cost == 100 + 100
+    )  # the override wins over (2.5, 15)
+    assert (
+        _llm_at("my-own-model").estimated_cost == 1 + 1
+    )  # a model the built-ins never heard of
 
 
-@pytest.mark.parametrize("content", ["{not json", '{"gpt-5.4": "cheap"}', '[1, 2]'])
-def test_a_broken_pricing_json_falls_back_to_the_builtin_table(monkeypatch, tmp_path, content):
+@pytest.mark.parametrize("content", ["{not json", '{"gpt-5.4": "cheap"}', "[1, 2]"])
+def test_a_broken_pricing_json_falls_back_to_the_builtin_table(
+    monkeypatch, tmp_path, content
+):
     from corecoder import llm as llm_module
+
     broken = tmp_path / "pricing.json"
     broken.write_text(content, encoding="utf-8")
     monkeypatch.setattr(llm_module, "PRICING_FILE", broken)
@@ -297,8 +323,10 @@ def test_a_broken_pricing_json_falls_back_to_the_builtin_table(monkeypatch, tmp_
 
 # --- Changed files tracking ---
 
+
 def test_edit_tracks_changed_files(tmp_path):
     from corecoder.tools.edit import _changed_files
+
     _changed_files.clear()
     edit = get_tool("edit_file")
     path = tmp_path / "sample.py"
@@ -310,6 +338,7 @@ def test_edit_tracks_changed_files(tmp_path):
 
 def test_write_tracks_changed_files(tmp_path):
     from corecoder.tools.edit import _changed_files
+
     _changed_files.clear()
     write = get_tool("write_file")
     path = tmp_path / "tracked.txt"
@@ -319,6 +348,7 @@ def test_write_tracks_changed_files(tmp_path):
 
 
 # --- Agent tool execution ---
+
 
 def test_parallel_bash_calls_inherit_and_merge_session_cwd(tmp_path):
     """Pool workers must start from the session cwd, not the launch dir, and a
@@ -439,7 +469,11 @@ def test_exec_tool_distinguishes_bad_args_from_internal_error():
     class _Boom(Tool):
         name = "boom"
         description = "raises TypeError internally"
-        parameters: ClassVar[dict] = {"type": "object", "properties": {}, "required": []}
+        parameters: ClassVar[dict] = {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
 
         def execute(self):
             raise TypeError("internal explosion")
@@ -461,7 +495,11 @@ def test_interrupt_backfills_missing_tool_replies():
     """A half-finished tool round must be repaired so history stays valid."""
     agent = Agent(llm=LLM.__new__(LLM), tools=[])
     agent.messages = [
-        {"role": "assistant", "content": None, "tool_calls": [{"id": "a"}, {"id": "b"}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "a"}, {"id": "b"}],
+        },
         {"role": "tool", "tool_call_id": "a", "content": "done"},
     ]
 
@@ -478,16 +516,20 @@ def test_interrupt_backfills_missing_tool_replies():
 
 # --- Task list injection ---
 
+
 def test_todo_list_is_injected_into_system_context():
     """After a todo_write call, the next request must carry the list in the system message."""
     from corecoder.tools.todo import TodoWriteTool
+
     todo = TodoWriteTool()
     agent = Agent(llm=LLM.__new__(LLM), tools=[todo])
 
-    todo.execute(tasks=[
-        {"content": "fix the bug", "status": "in_progress"},
-        {"content": "add a test", "status": "pending"},
-    ])
+    todo.execute(
+        tasks=[
+            {"content": "fix the bug", "status": "in_progress"},
+            {"content": "add a test", "status": "pending"},
+        ]
+    )
     system = agent._full_messages()[0]["content"]
     assert "# Current task list" in system
     assert "1. [in_progress] fix the bug" in system
@@ -497,6 +539,7 @@ def test_todo_list_is_injected_into_system_context():
 def test_todo_injection_tracks_updates():
     """The injection is rebuilt every round: updates show, an empty list injects nothing."""
     from corecoder.tools.todo import TodoWriteTool
+
     todo = TodoWriteTool()
     agent = Agent(llm=LLM.__new__(LLM), tools=[todo])
 
@@ -540,7 +583,9 @@ class TestLLMParamFallback:
             import httpx2 as httpx
 
         req = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-        return BadRequestError(msg, response=httpx.Response(400, request=req), body=None)
+        return BadRequestError(
+            msg, response=httpx.Response(400, request=req), body=None
+        )
 
     @staticmethod
     def _stream():
@@ -549,7 +594,11 @@ class TestLLMParamFallback:
         return [
             SimpleNamespace(
                 usage=None,
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="ok", tool_calls=None))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="ok", tool_calls=None)
+                    )
+                ],
             )
         ]
 
@@ -564,7 +613,11 @@ class TestLLMParamFallback:
         llm = self._make_llm()
         create = self._chat_with_failures(
             llm,
-            [self._bad_request("Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.")],
+            [
+                self._bad_request(
+                    "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
+                )
+            ],
         )
         retry_kwargs = create.call_args_list[-1][1]
         assert retry_kwargs["max_completion_tokens"] == 1024
@@ -574,7 +627,11 @@ class TestLLMParamFallback:
         llm = self._make_llm()
         create = self._chat_with_failures(
             llm,
-            [self._bad_request("Unsupported value: 'temperature' does not support 0.7 with this model.")],
+            [
+                self._bad_request(
+                    "Unsupported value: 'temperature' does not support 0.7 with this model."
+                )
+            ],
         )
         retry_kwargs = create.call_args_list[-1][1]
         assert "temperature" not in retry_kwargs
@@ -592,8 +649,10 @@ class TestLLMParamFallback:
         with pytest.raises(BadRequestError):
             self._chat_with_failures(
                 llm,
-                [self._bad_request("Unsupported parameter: 'response_format' here"),
-                 self._bad_request("Unsupported parameter: 'response_format' here")],
+                [
+                    self._bad_request("Unsupported parameter: 'response_format' here"),
+                    self._bad_request("Unsupported parameter: 'response_format' here"),
+                ],
             )
 
     def test_rejected_max_completion_tokens_does_not_loop(self):
@@ -602,8 +661,14 @@ class TestLLMParamFallback:
         llm = self._make_llm()
         create = self._chat_with_failures(
             llm,
-            [self._bad_request("Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens'."),
-             self._bad_request("Unsupported parameter: 'max_completion_tokens' is unknown here")],
+            [
+                self._bad_request(
+                    "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens'."
+                ),
+                self._bad_request(
+                    "Unsupported parameter: 'max_completion_tokens' is unknown here"
+                ),
+            ],
         )
         # second failure surfaces because neither retry looped nor re-adapted
         retry_kwargs = create.call_args_list[-1][1]
@@ -632,18 +697,33 @@ class TestReasoningPassthrough:
         return [
             SimpleNamespace(
                 usage=None,
-                choices=[SimpleNamespace(delta=SimpleNamespace(
-                    content=None, tool_calls=None, reasoning_content="think "))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None, tool_calls=None, reasoning_content="think "
+                        )
+                    )
+                ],
             ),
             SimpleNamespace(
                 usage=None,
-                choices=[SimpleNamespace(delta=SimpleNamespace(
-                    content="answer", tool_calls=None, reasoning_content=None))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content="answer", tool_calls=None, reasoning_content=None
+                        )
+                    )
+                ],
             ),
             SimpleNamespace(
                 usage=SimpleNamespace(prompt_tokens=5, completion_tokens=3),
-                choices=[SimpleNamespace(delta=SimpleNamespace(
-                    content=None, tool_calls=None, reasoning_content="hard"))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None, tool_calls=None, reasoning_content="hard"
+                        )
+                    )
+                ],
             ),
         ]
 
@@ -676,8 +756,13 @@ class TestReasoningPassthrough:
         llm.client.chat.completions.create.return_value = [
             SimpleNamespace(
                 usage=None,
-                choices=[SimpleNamespace(delta=SimpleNamespace(
-                    content="answer", tool_calls=None, reasoning="ponder"))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content="answer", tool_calls=None, reasoning="ponder"
+                        )
+                    )
+                ],
             ),
         ]
         reasoning_parts = []
@@ -706,8 +791,13 @@ class _DyingStream:
             self._yielded = True
             return SimpleNamespace(
                 usage=None,
-                choices=[SimpleNamespace(delta=SimpleNamespace(
-                    content="part", tool_calls=None, reasoning_content=None))],
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content="part", tool_calls=None, reasoning_content=None
+                        )
+                    )
+                ],
             )
         raise self._exc
 
@@ -726,11 +816,20 @@ class TestMidStreamRetry:
     def _good_stream():
         from types import SimpleNamespace
 
-        return iter([SimpleNamespace(
-            usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2),
-            choices=[SimpleNamespace(delta=SimpleNamespace(
-                content="full", tool_calls=None, reasoning_content=None))],
-        )])
+        return iter(
+            [
+                SimpleNamespace(
+                    usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2),
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content="full", tool_calls=None, reasoning_content=None
+                            )
+                        )
+                    ],
+                )
+            ]
+        )
 
     @staticmethod
     def _connection_error():
@@ -742,7 +841,8 @@ class TestMidStreamRetry:
         from openai import APIConnectionError
 
         return APIConnectionError(
-            request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
+            request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        )
 
     @staticmethod
     def _server_error():
@@ -755,7 +855,8 @@ class TestMidStreamRetry:
 
         req = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
         return InternalServerError(
-            "boom", response=httpx.Response(500, request=req), body=None)
+            "boom", response=httpx.Response(500, request=req), body=None
+        )
 
     def test_connection_drop_mid_stream_retries(self):
         llm = self._make_llm()

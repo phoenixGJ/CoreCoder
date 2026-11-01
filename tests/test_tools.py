@@ -8,7 +8,7 @@ from tests.conftest import get_tool
 
 
 def test_tool_count():
-    assert len(ALL_TOOLS) == 8
+    assert len(ALL_TOOLS) == 11
 
 
 def test_all_tools_have_valid_schema():
@@ -482,3 +482,18 @@ def test_todo_write_bad_call_keeps_old_list():
     todo.execute(tasks=[{"content": "keep me", "status": "pending"}])
     todo.execute(tasks=[{"content": "bad", "status": "nope"}])
     assert "keep me" in todo.render()
+# --- fetch_webpage ---
+def test_fetch_webpage_rejects_file_url():
+    fetch = get_tool("fetch_webpage")
+
+    result = fetch.execute(url="file:///etc/passwd")
+
+    assert "error" in result.lower()
+
+
+def test_fetch_webpage_rejects_localhost():
+    fetch = get_tool("fetch_webpage")
+
+    result = fetch.execute(url="http://127.0.0.1:8000")
+
+    assert "error" in result.lower()

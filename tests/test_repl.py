@@ -77,7 +77,7 @@ def test_save_writes_a_session_file(monkeypatch, tmp_path, capsys):
 
     repl_with(monkeypatch, agent, ["/save", "quit"])
 
-    assert len(list(tmp_path.glob("*.json"))) == 1
+    assert len(list(tmp_path.glob("*.jsonl"))) == 1
     assert "Session saved:" in capsys.readouterr().out
 
 

@@ -65,7 +65,7 @@ def test_save_then_sessions_lists_it(monkeypatch, capsys, tmp_path):
 
     out = capsys.readouterr().out
     assert "Session saved: session_" in out
-    saved = list(tmp_path.glob("*.json"))
+    saved = list(tmp_path.glob("*.jsonl"))
     assert len(saved) == 1
     assert saved[0].stem in out  # /sessions printed the same id
     assert "remember this" in out  # and its first-user-message preview

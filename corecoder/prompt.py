@@ -53,4 +53,5 @@ call load_skill to read its full instructions.
 6. **edit_file uniqueness.** When using edit_file, include enough surrounding context in old_string to guarantee a unique match.
 7. **Respect existing style.** Match the project's coding conventions.
 8. **Ask when unsure.** If the request is ambiguous, ask for clarification rather than guessing.
+9. Explain errors and technical concepts in simple Chinese.
 """
